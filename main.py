@@ -1,29 +1,26 @@
+import re
+import aiohttp
+from typing import Optional, Dict, Any
+
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
-from astrbot.api import AstrBotConfig
+from astrbot.api import logger, AstrBotConfig
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_agent_context import AstrAgentContext
+from bilibili_api import video, Credential
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_context import AstrAgentContext
-
-import json
-import aiohttp
-from bilibili_api import video, Credential
-
-# 定义需要忽略的导入错误（如果是本地开发环境检查）
-import warnings
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# BVID 格式预编译正则：BV开头，后续为字母或数字，通常长度为12位
+BVID_PATTERN = re.compile(r"^BV[a-zA-Z0-9]+$")
 
 
 @dataclass(config=dict(arbitrary_types_allowed=True))
 class BilibiliTool(FunctionTool[AstrAgentContext]):
     name: str = "bilibili_read"
-    description: str = "获取一个哔哩哔哩视频的概要，如果视频没有字幕则返回提示信息。"
+    description: str = "获取一个哔哩哔哩视频的概要。如果视频没有字幕则返回提示信息。"
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
@@ -42,84 +39,105 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
     bili_jct: str = ""
     ct: Context = Field(default=None)
     llm_provider_id: str = ""
+    # 新增：字幕最大长度限制，防止上下文溢出
+    max_subtitle_length: int = 4000
+
+    def _check_config(self) -> Optional[str]:
+        """防御性检查：确保核心依赖已注入"""
+        if not self.ct:
+            return "插件内部错误：上下文未注入"
+        if not self.llm_provider_id:
+            return "插件配置错误：未配置 llm_provider_id"
+        return None
 
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> str:
-        bvid = kwargs.get("bvid")
+        # 1. 防御性检查
+        config_err = self._check_config()
+        if config_err:
+            return config_err
 
-        if not bvid:
-            return "错误：未提供 BVID 参数。"
+        bvid = kwargs.get("bvid", "").strip()
+
+        # 2. 输入格式校验
+        if not bvid or not BVID_PATTERN.match(bvid):
+            return f"参数错误：'{bvid}' 不是合法的 BVID 格式（需以 BV 开头且仅包含字母数字）。"
+
+        # 3. 初始化凭证
+        credential = Credential(sessdata=self.sessdata, bili_jct=self.bili_jct)
+        v = video.Video(bvid, credential=credential)
 
         try:
-            # 1. 初始化凭证和视频对象
-            # 注意：即使是公开视频，建议也传入 Credential，否则可能遭遇风控限制
-            credential = Credential(sessdata=self.sessdata, bili_jct=self.bili_jct)
-            v = video.Video(bvid, credential=credential)
-
-            # 2. 获取视频基础信息
+            # 4. 获取视频基础信息
+            # 这一步可能抛出网络异常或视频不存在的 API 异常
             info = await v.get_info()
             title = info.get("title", "未知标题")
 
-            # 3. 获取 CID
+            # 5. 获取 CID
             cid = await v.get_cid(0)
 
-            # 4. 获取字幕列表
+            # 6. 获取字幕元数据
             subtitle_info = await v.get_subtitle(cid)
 
-            # 优化：检测是否存在字幕
-            if (
-                not subtitle_info
-                or "subtitles" not in subtitle_info
-                or not subtitle_info["subtitles"]
-            ):
-                return f"视频《{title}》暂无字幕，无法生成总结。请尝试其他视频。"
+            # 业务逻辑检查：是否有字幕数据
+            if not subtitle_info or not subtitle_info.get("subtitles"):
+                return f"视频《{title}》暂无可用字幕，无法生成总结。"
 
-            # 优化：优先寻找中文字幕，如果没有则取第一个
+            # 优先寻找中文字幕 (zh-CN, zh-Hans)
             target_subtitle = None
             for sub in subtitle_info["subtitles"]:
-                if sub.get("lan", "").startswith("zh"):  # 匹配 zh-CN, zh-Hans 等
+                if sub.get("lan", "").startswith("zh"):
                     target_subtitle = sub
                     break
 
+            # 兜底：取第一个
             if not target_subtitle:
                 target_subtitle = subtitle_info["subtitles"][0]
 
-            subtitle_url = target_subtitle["subtitle_url"]
-            logger.info(f"正在获取视频《{title}》的字幕: {subtitle_url}")
+            subtitle_url = target_subtitle.get("subtitle_url", "")
+            if not subtitle_url:
+                return "错误：字幕元数据中缺失 URL。"
 
-            # 5. 获取字幕内容
+            # 7. 下载字幕内容
             if not subtitle_url.startswith("http"):
                 subtitle_url = "https:" + subtitle_url
 
+            # 日志脱敏：去除 URL 参数，防止泄露签名
+            log_url = subtitle_url.split("?")[0]
+            logger.info(f"正在获取视频《{title}》字幕: {log_url}")
+
             subtitle_text = ""
-            timeout = aiohttp.ClientTimeout(total=10)
+            timeout = aiohttp.ClientTimeout(total=15)
+
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(subtitle_url) as resp:
-                    if resp.status == 200:
-                        subtitle_json = await resp.json()
-                        # 解析字幕
-                        # 格式通常为 {"body": [{"content": "...", "from": ...}, ...]}
-                        body = subtitle_json.get("body", [])
-                        subtitle_text = "\n".join(
-                            [item.get("content", "") for item in body]
-                        )
-                    else:
-                        return f"获取字幕文件失败，状态码: {resp.status}"
+                    if resp.status != 200:
+                        return f"下载字幕文件失败，HTTP 状态码: {resp.status}"
+
+                    # 使用 aiohttp 直接解析 json，避免手动 import json
+                    subtitle_json = await resp.json()
+
+            # 8. 解析与截断
+            body = subtitle_json.get("body", [])
+            raw_text = "\n".join([item.get("content", "") for item in body])
+
+            # 长度控制：防止 LLM 上下文溢出
+            if len(raw_text) > self.max_subtitle_length:
+                logger.info(f"字幕过长 ({len(raw_text)}字符)，已执行截断。")
+                raw_text = (
+                    raw_text[: self.max_subtitle_length] + "\n...(后续内容已省略)"
+                )
+
+            subtitle_text = raw_text
 
             if not subtitle_text:
-                return f"视频《{title}》字幕内容为空。"
+                return f"视频《{title}》字幕内容解析为空。"
 
-            # 6. 调用 LLM 进行总结
-            # 如果字幕过长，建议在此处进行截断，防止超出 Context 限制
-            # 这里的 prompt 可以根据需要调整
+            # 9. 调用 LLM
             prompt = (
-                f"这是视频《{title}》的字幕内容。"
-                f"请你扮演一个视频总结助手，根据字幕内容总结视频的核心观点。"
-                f"要求语言简练，保留关键信息，不要只是罗列时间轴：\n\n{subtitle_text}"
+                f"视频标题：《{title}》\n"
+                f"字幕内容：\n{subtitle_text}\n\n"
+                f"请根据上述字幕内容总结视频的核心观点，保留关键信息。"
             )
-
-            # 检查 llm_provider_id 是否配置
-            if not self.llm_provider_id:
-                return "插件配置错误：未配置 llm_provider_id，无法调用大模型。"
 
             ai_resp = await self.ct.llm_generate(
                 chat_provider_id=self.llm_provider_id,
@@ -128,47 +146,70 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
 
             return ai_resp
 
+        except aiohttp.ClientError as e:
+            logger.error(f"网络请求异常: {e}")
+            return "网络请求异常，请稍后重试。"
+        except KeyError as e:
+            logger.error(f"数据解析异常，结构可能发生变更: {e}")
+            return "解析字幕数据时发生错误，可能是 API 结构变更。"
         except Exception as e:
-            logger.error(f"BilibiliTool 处理出错: {e}")
-            return f"处理视频时发生错误: {str(e)}。请检查BVID是否正确或Cookie是否过期。"
+            # 捕获 bilibili_api 抛出的其他异常或未知异常
+            # 建议在日志中打印完整堆栈
+            logger.exception(f"处理 BVID {bvid} 时发生未知错误")
+            return f"处理视频时发生内部错误: {str(e)}"
 
 
 @register(
     "astrbot_plugin_biliread",
     "SodaCode",
     "让你的AstrBot看懂视频，而不是像机器人一样输出视频大纲",
-    "1.0.1",
+    "1.1.0",
 )
 class BiliRead(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        self.config = config
 
-        # 安全获取配置
-        # 建议在 metadata.yaml 中将配置项命名为 sessdata 和 bili_jct 以便直接映射
-        # 如果配置结构是 bilibili_cookie: { sessdata: ..., id: ... }，则如下处理：
-        plugin_config = config or {}
+        # 1. 安全的配置读取
+        # 兼容 config 是字典或 Pydantic 对象的情况
+        if isinstance(config, dict):
+            plugin_config = config
+        elif hasattr(config, "model_dump"):
+            # Pydantic v2
+            plugin_config = config.model_dump()
+        elif hasattr(config, "dict"):
+            # Pydantic v1
+            plugin_config = config.dict()
+        else:
+            logger.warning(f"不支持的配置类型: {type(config)}，使用默认空配置。")
+            plugin_config = {}
+
+        # 2. 提取配置项
         bilibili_cookie = plugin_config.get("bilibili_cookie", {})
 
+        # 明确语义：不再使用有歧义的 'id'，统一读取 'bili_jct'
+        # 如果用户配置了 'id'，代码逻辑上也可以尝试兼容读取，但优先使用正确键名
         sessdata = bilibili_cookie.get("sessdata", "")
-        # 注意：这里假设用户配置中键名为 id，建议改为 bili_jct 更直观
-        bili_jct = bilibili_cookie.get("id", "") or bilibili_cookie.get("bili_jct", "")
-
+        bili_jct = bilibili_cookie.get("bili_jct", bilibili_cookie.get("id", ""))
         llm_provider_id = plugin_config.get("llm_provider_id", "")
+        max_len = plugin_config.get("max_subtitle_length", 4000)
 
-        logger.info(f"BiliRead 插件加载 - LLM Provider: {llm_provider_id}")
-
+        # 3. 配置完整性校验日志
         if not sessdata:
             logger.warning(
-                "BiliRead: 未检测到 SESSDATA，获取高清字幕或限制级视频可能会失败。"
+                "BiliRead: SESSDATA 未配置，可能导致无法获取高质量字幕或鉴权失败。"
             )
+        if not bili_jct:
+            logger.warning("BiliRead: bili_jct 未配置。")
+        if not llm_provider_id:
+            logger.error("BiliRead: llm_provider_id 未配置，LLM 功能将不可用。")
 
-        # 实例化并注册工具
+        # 4. 注册工具
         tool = BilibiliTool(
             sessdata=sessdata,
             bili_jct=bili_jct,
             ct=self.context,
             llm_provider_id=llm_provider_id,
+            max_subtitle_length=max_len,
         )
         self.context.add_llm_tools(tool)
 
@@ -177,7 +218,6 @@ class BiliRead(Star):
 
     @filter.command("biliread")
     async def biliread(self, event: AstrMessageEvent):
-        # 这里可以增加一个简单的测试指令
         yield event.plain_result(
             "BiliRead 插件已就绪。请直接发送 BVID 或让 AI 调用工具。"
         )

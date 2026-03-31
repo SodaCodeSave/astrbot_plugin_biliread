@@ -1,0 +1,20 @@
+{
+    "llm_provider_id": {
+        "description": "总结视频的AI模型ID",
+        "type": "string"
+    },
+    "bilibili_cookie": {
+        "description": "B站Cookie",
+        "type": "object",
+        "items": {
+            "sessdata": {
+                "description": "sessdata",
+                "type": "string"
+            },
+            "id": {
+                "description": "bili_jct",
+                "type": "string"
+            }
+        }
+    }
+}

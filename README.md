@@ -1,14 +1,57 @@
-# astrbot-plugin-helloworld
+# 🎬 BiliRead - 让 AI 真正看懂 B 站视频
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+> 告别机械式的视频大纲复制，让你的 AstrBot 拥有真正“看懂” B 站视频的能力。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+## ✨ 功能特性
 
-# Supports
+- 🧠 **深度理解**：不再像传统机器人那样干瘪地输出官方简介，而是通过提取视频字幕，让大模型真正理解视频内容。
+- 🔗 **无缝挂载**：作为 Agent Tool 直接挂载到 AstrBot 的大脑中，无需额外指令，对话中发链接即可触发。
+- 🛠️ **极简配置**：只需配置 B 站凭据与指定总结模型，开箱即用。
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+## 📦 安装
+
+在 AstrBot 管理后台的 **插件市场** 中搜索 `BiliRead` 直接安装即可。
+*(若为手动安装，请将本仓库克隆至 AstrBot 的 `data/plugins/` 目录下并重启)*
+
+## ⚙️ 配置说明
+
+安装完成后，进入 AstrBot 后台 -> 插件配置 -> 找到 `BiliRead`，需要填写以下内容：
+
+### 1. B站 Cookie (`bilibili_cookie`)
+由于 B 站部分视频信息及字幕接口需要登录态，请提供你账号的 Cookie 信息。
+插件需要其中的 `SESSDATA` 和 `bili_jct` 字段。
+
+**💡 如何获取？**
+1. 在电脑端浏览器登录 [Bilibili](https://www.bilibili.com)。
+2. 按 `F12` 打开开发者工具，切换到 `网络` 或 `应用` 标签页。
+3. 随便点击一个 B 站的请求，在请求头中找到 `Cookie`。
+4. 在一长串字符中找到 `SESSDATA=xxxxxx` 和 `bili_jct=xxxxxx`。
+5. 将 `=` 后面的那一串**乱码内容**分别填入插件的对应输入框中。
+
+### 2. 总结视频的AI模型ID (`llm_provider_id`)
+指定一个用来“阅读字幕并总结”的 AI 模型。
+**💡 如何获取？**
+在 AstrBot 后台的 `模型配置` 页面，找到你想使用的模型（建议使用上下文长度较大、理解能力强的模型，如 DeepSeek、GPT-4o 等），复制其前面的 **模型 ID**（通常类似 `ali_qwen...` 或 `deepseek...`），填入此处。
+
+## 🚀 使用方法
+
+本插件以 **Tool (工具)** 的形式运行，**无需发送特定指令**。
+
+配置完成后，当你与 AstrBot 聊天时，只需发送包含 **B站视频链接** 或 **BV号** 的消息（例如：“帮我总结一下这个视频 https://www.bilibili.com/video/BVxxxxx ”），AI 就会自动在后台调用 `bilibili_read` 工具获取字幕并进行总结。
+
+*(注：发送 `/biliread` 指令仅用于检查插件是否处于正常运行状态)*
+
+## ⚠️ 注意事项 & 常见问题
+
+1. **不是所有视频都有字幕**：如果 UP 主没有上传字幕，且 B 站也没有自动生成 AI 字幕，插件将无法获取内容。此时可能会抛出错误或返回空内容，这属于正常现象。
+2. **Cookie 过期问题**：B 站的 `SESSDATA` 有效期通常为几个月。如果突然开始报错（如凭据失效），请尝试重新登录 B 站并更新配置中的 Cookie。
+3. **风控拦截**：如果请求过于频繁，B 站可能会触发风控导致请求失败。请勿在短时间内高并发测试。
+4. **总结消耗 Token**：由于是将视频字幕喂给大模型，对于超长视频（如几小时的演讲），可能会消耗较多的 Token，请确保你指定的模型有足够的额度。
+
+## 📝 开发者日志
+
+- `v1.0.0` - 初始版本发布，支持基础字幕抓取与 LLM 总结。
+
+## 📜 开源协议
+
+MIT License

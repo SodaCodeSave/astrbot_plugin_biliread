@@ -1,6 +1,6 @@
 name: astrbot_plugin_biliread # 插件唯一识别名，以 astrbot_plugin_ 前缀开头
-display_name: BiliRead - 让AI读懂B站视频 # 用于展示的名字，可以是方便人类阅读的名字（需要版本 >= v4.5.0，低版本不会报错，请放心填写）
-desc: 让你的AstrBot看懂视频，而不是像机器人一样输出视频大纲 # 插件简短描述
+display_name: BiliRead - 让 AI 真正看懂 B 站视频 # 用于展示的名字，可以是方便人类阅读的名字（需要版本 >= v4.5.0，低版本不会报错，请放心填写）
+desc: 告别机械式的视频大纲复制，让你的 AstrBot 拥有真正“看懂” B 站视频的能力。 # 插件简短描述
 version: v1.0.0 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: SodaCode & CodeBuddy & GLM-5 # 作者
 repo: https://github.com/SodaCodeSave/astrbot_plugin_biliread # 插件的仓库地址

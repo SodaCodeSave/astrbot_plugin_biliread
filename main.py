@@ -161,8 +161,8 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
 
 @register(
     "astrbot_plugin_biliread",
-    "SodaCode",
-    "让你的AstrBot看懂视频，而不是像机器人一样输出视频大纲",
+    "SodaCode & CodeBuddy & GLM-5",
+    "告别机械式的视频大纲复制，让你的 AstrBot 拥有真正“看懂” B 站视频的能力。",
     "1.1.1",
 )
 class BiliRead(Star):

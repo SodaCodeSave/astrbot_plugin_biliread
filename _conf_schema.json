@@ -1,10 +1,13 @@
 {
     "llm_provider_id": {
-        "description": "总结视频的AI模型ID",
-        "type": "string"
+        "description": "总结视频的AI模型",
+        "hint": "小模型效果也不错哦，如果经费紧张的话可以试试便宜的小模型",
+        "type": "string",
+        "_special": "select_provider"
     },
     "bilibili_cookie": {
         "description": "B站Cookie",
+        "hint": "README有详细的获取教程，快去看看罢",
         "type": "object",
         "items": {
             "sessdata": {

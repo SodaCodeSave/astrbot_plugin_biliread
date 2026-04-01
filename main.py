@@ -163,7 +163,7 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
     "astrbot_plugin_biliread",
     "SodaCode",
     "让你的AstrBot看懂视频，而不是像机器人一样输出视频大纲",
-    "1.1.0",
+    "1.1.1",
 )
 class BiliRead(Star):
     def __init__(self, context: Context, config: AstrBotConfig):

@@ -163,7 +163,7 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
     "astrbot_plugin_biliread",
     "SodaCode & CodeBuddy & GLM-5",
     "告别机械式的视频大纲复制，让你的 AstrBot 拥有真正“看懂” B 站视频的能力。",
-    "1.1.1",
+    "1.1.2",
 )
 class BiliRead(Star):
     def __init__(self, context: Context, config: AstrBotConfig):

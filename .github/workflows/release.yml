@@ -50,7 +50,6 @@ jobs:
               echo "无法确定上一版本，跳过发布"
               echo "should_release=false" >> $GITHUB_OUTPUT
               echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-              echo "prev_tag=" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
@@ -69,29 +68,24 @@ jobs:
             echo "版本号已更新: $PREV_VERSION -> $NEW_VERSION"
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+            
+            # 生成 changelog
+            echo '## 更新内容' > changelog.txt
+            echo '' >> changelog.txt
+            if [ -z "$PREV_TAG" ]; then
+              git log --pretty=format:'- %s' >> changelog.txt
+            else
+              git log "$PREV_TAG"..HEAD --pretty=format:'- %s' >> changelog.txt
+            fi
+            echo '' >> changelog.txt
+            echo '---' >> changelog.txt
+            echo "插件版本: $NEW_VERSION" >> changelog.txt
+            cat changelog.txt
           else
             echo "版本号未变化，跳过发布"
             echo "should_release=false" >> $GITHUB_OUTPUT
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
           fi
-
-      - name: Generate changelog
-        if: steps.check_version.outputs.should_release == 'true'
-        id: changelog
-        run: |
-          echo "## 更新内容" > changelog.txt
-          echo "" >> changelog.txt
-          if [ -z "${{ steps.check_version.outputs.prev_tag }}" ]; then
-            git log --pretty=format:"- %s" >> changelog.txt
-          else
-            git log ${{ steps.check_version.outputs.prev_tag }}..HEAD --pretty=format:"- %s" >> changelog.txt
-          fi
-          echo "" >> changelog.txt
-          echo "---" >> changelog.txt
-          echo "插件版本: ${{ steps.check_version.outputs.new_version }}" >> changelog.txt
-          cat changelog.txt
 
       - name: Create Release
         if: steps.check_version.outputs.should_release == 'true'

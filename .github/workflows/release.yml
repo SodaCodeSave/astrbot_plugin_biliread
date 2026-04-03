@@ -1,0 +1,111 @@
+name: Release on Version Change
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      should_release: ${{ steps.check_version.outputs.should_release }}
+      new_version: ${{ steps.check_version.outputs.new_version }}
+      changelog: ${{ steps.check_version.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version change
+        id: check_version
+        run: |
+          # 获取当前提交的版本号
+          NEW_VERSION=$(grep "^version:" metadata.yaml | sed 's/version:\s*//' | tr -d ' ')
+          
+          if [ -z "$NEW_VERSION" ]; then
+            echo "未找到版本号，退出"
+            exit 1
+          fi
+          
+          # 获取上一个版本号（从上一次 release 的 tag）
+          PREV_TAG=""
+          for tag in $(git tag --sort=-v:refname | head -20); do
+            if [[ "$tag" == v* ]] || [[ "$tag" == *.*.* ]]; then
+              PREV_TAG="$tag"
+              break
+            fi
+          done
+          
+          if [ -z "$PREV_TAG" ]; then
+            # 没有历史 tag，使用第一个 commit 的版本号
+            PREV_VERSION=$(git log --reverse --oneline | head -1 | while IFS= read -r commit msg; do
+              git show $commit:metadata.yaml 2>/dev/null | grep "^version:" | sed 's/version:\s*//' | tr -d ' '
+            done)
+            if [ -z "$PREV_VERSION" ]; then
+              echo "无法确定上一版本，跳过发布"
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+              echo "changelog=" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          else
+            # 从上一个 tag 获取版本号
+            PREV_VERSION=$(git show $PREV_TAG:metadata.yaml 2>/dev/null | grep "^version:" | sed 's/version:\s*//' | tr -d ' ')
+            if [ -z "$PREV_VERSION" ]; then
+              PREV_VERSION="$PREV_TAG"
+            fi
+          fi
+          
+          echo "当前版本: $NEW_VERSION"
+          echo "上一版本: $PREV_VERSION"
+          
+          # 比较版本号
+          if [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+            echo "版本号已更新: $PREV_VERSION -> $NEW_VERSION"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            
+            # 生成 changelog（从上一个 tag 到现在的所有提交）
+            if [ -z "$PREV_TAG" ]; then
+              CHANGELOG=$(git log --pretty=format:"- %s" | tr -d '\n')
+            else
+              CHANGELOG=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" | tr -d '\n')
+            fi
+            echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          else
+            echo "版本号未变化，跳过发布"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "changelog=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.check_version.outputs.new_version }}
+          name: Release ${{ steps.check_version.outputs.new_version }}
+          body: |
+            ## 更新内容
+
+            ${{ steps.check_version.outputs.changelog }}
+
+            ---
+            插件版本: ${{ steps.check_version.outputs.new_version }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create new tag
+        if: steps.check_version.outputs.should_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a ${{ steps.check_version.outputs.new_version }} -m "Release ${{ steps.check_version.outputs.new_version }}"
+          git push origin ${{ steps.check_version.outputs.new_version }}

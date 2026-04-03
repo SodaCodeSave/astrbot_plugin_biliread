@@ -216,11 +216,11 @@ class BiliRead(Star):
     async def initialize(self):
         pass
 
-    @filter.command("biliread")
-    async def biliread(self, event: AstrMessageEvent):
-        yield event.plain_result(
-            "BiliRead 插件已就绪。请直接发送 BVID 或让 AI 调用工具。"
-        )
+    # @filter.command("biliread")
+    # async def biliread(self, event: AstrMessageEvent):
+    #     yield event.plain_result(
+    #         "BiliRead 插件已就绪。请直接发送 BVID 或让 AI 调用工具。"
+    #     )
 
     async def terminate(self):
         pass

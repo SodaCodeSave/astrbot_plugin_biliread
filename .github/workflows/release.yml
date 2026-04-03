@@ -15,7 +15,7 @@ jobs:
     outputs:
       should_release: ${{ steps.check_version.outputs.should_release }}
       new_version: ${{ steps.check_version.outputs.new_version }}
-      changelog: ${{ steps.check_version.outputs.changelog }}
+      prev_tag: ${{ steps.check_version.outputs.prev_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +50,7 @@ jobs:
               echo "无法确定上一版本，跳过发布"
               echo "should_release=false" >> $GITHUB_OUTPUT
               echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-              echo "changelog=" >> $GITHUB_OUTPUT
+              echo "prev_tag=" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
@@ -69,20 +69,29 @@ jobs:
             echo "版本号已更新: $PREV_VERSION -> $NEW_VERSION"
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            
-            # 生成 changelog（从上一个 tag 到现在的所有提交）
-            if [ -z "$PREV_TAG" ]; then
-              CHANGELOG=$(git log --pretty=format:"- %s" | tr -d '\n')
-            else
-              CHANGELOG=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" | tr -d '\n')
-            fi
-            echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
           else
             echo "版本号未变化，跳过发布"
             echo "should_release=false" >> $GITHUB_OUTPUT
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "changelog=" >> $GITHUB_OUTPUT
+            echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
           fi
+
+      - name: Generate changelog
+        if: steps.check_version.outputs.should_release == 'true'
+        id: changelog
+        run: |
+          echo "## 更新内容" > changelog.txt
+          echo "" >> changelog.txt
+          if [ -z "${{ steps.check_version.outputs.prev_tag }}" ]; then
+            git log --pretty=format:"- %s" >> changelog.txt
+          else
+            git log ${{ steps.check_version.outputs.prev_tag }}..HEAD --pretty=format:"- %s" >> changelog.txt
+          fi
+          echo "" >> changelog.txt
+          echo "---" >> changelog.txt
+          echo "插件版本: ${{ steps.check_version.outputs.new_version }}" >> changelog.txt
+          cat changelog.txt
 
       - name: Create Release
         if: steps.check_version.outputs.should_release == 'true'
@@ -90,22 +99,8 @@ jobs:
         with:
           tag_name: ${{ steps.check_version.outputs.new_version }}
           name: Release ${{ steps.check_version.outputs.new_version }}
-          body: |
-            ## 更新内容
-
-            ${{ steps.check_version.outputs.changelog }}
-
-            ---
-            插件版本: ${{ steps.check_version.outputs.new_version }}
+          body_path: changelog.txt
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create new tag
-        if: steps.check_version.outputs.should_release == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ steps.check_version.outputs.new_version }} -m "Release ${{ steps.check_version.outputs.new_version }}"
-          git push origin ${{ steps.check_version.outputs.new_version }}

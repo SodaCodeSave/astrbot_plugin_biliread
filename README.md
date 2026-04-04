@@ -2,7 +2,7 @@
 
 > AstrBot 插件，让 AI 理解 B 站视频，并给出符合人设的自然回复
 
-![BiliRead](https://github.com/SodaCodeSave/astrbot_plugin_biliread/blob/main/images/PixPin_2026-04-04_11-58-38.png)
+![BiliRead](https://github.com/SodaCodeSave/astrbot_plugin_biliread/blob/master/images/PixPin_2026-04-04_11-58-38.png)
 
 ## ✨ 功能特性
 

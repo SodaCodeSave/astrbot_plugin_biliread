@@ -2,6 +2,8 @@
 
 > AstrBot 插件，让 AI 理解 B 站视频，并给出符合人设的自然回复
 
+![BiliRead](https://github.com/SodaCodeSave/astrbot_plugin_biliread/blob/main/images/PixPin_2026-04-04_11-58-38.png)
+
 ## ✨ 功能特性
 
 - 🧠 **深度理解**：不再像传统插件那样使用指令直接发出视频总结，而是通过提取视频字幕，生成总结后返回给AstrBot，让给出符合人设的自然回复

@@ -25,7 +25,7 @@
 
 ## ⚙️ 配置说明
 
-安装完成后，进入 AstrBot 后台 -> 插件配置 -> 找到 `BiliRead`，需要填写以下内容：
+安装完成后，进入 AstrBot 后台 -> AstrBot 插件 -> 找到 `BiliRead`，需要填写以下内容：
 
 ### 1. B站 Cookie
 
@@ -36,7 +36,7 @@
 
 1. 安装 [Cookie Editor](https://microsoftedge.microsoft.com/addons/detail/cookieeditor/neaplmfkghagebokkhpjpoebhdledlfi) 浏览器插件。
 2. 登录 B 站后，打开 Cookie Editor，找到 `SESSDATA` 和 `bili_jct` 的值，复制。
-3. 进入 AstrBot 后台 -> 插件配置 -> 找到 `BiliRead`，将复制的值分别填入插件的对应输入框中。
+3. 进入 AstrBot 后台 -> AstrBot 插件 -> 找到 `BiliRead`，将复制的值分别填入插件的对应输入框中。
 
 #### 使用开发者工具获取（适合高手）
 

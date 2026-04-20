@@ -13,8 +13,48 @@ from bilibili_api import video, Credential
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-# BVID 格式预编译正则：BV开头，后续为字母或数字，通常长度为12位
-BVID_PATTERN = re.compile(r"^BV[a-zA-Z0-9]+$")
+# BVID 格式预编译正则：BV开头，后续为字母或数字
+BVID_PATTERN = re.compile(r"BV[a-zA-Z0-9]{10,12}")
+
+
+async def resolve_b23(short_url: str) -> str:
+    """
+    解析 b23.tv 短链，返回真实的长链接
+    """
+    timeout = aiohttp.ClientTimeout(total=10)
+
+    if not short_url.startswith("http"):
+        short_url = "https://" + short_url
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        # 第一次请求
+        async with session.get(short_url, allow_redirects=False) as response:
+            real_url = response.headers.get("Location", short_url)
+
+        # 处理重定向
+        max_redirects = 10
+        for _ in range(max_redirects):
+            if not real_url.startswith("http"):
+                break
+            async with session.get(real_url, allow_redirects=False) as response:
+                next_url = response.headers.get("Location")
+                if not next_url:
+                    break
+                real_url = next_url
+
+    # 提取BVID
+    match = BVID_PATTERN.search(real_url)
+
+    logger.info(f"解析b23.tv短链成功：{short_url} -> {real_url}")
+
+    bvid = match.group(0) if match else ""
+    if not bvid:
+        logger.error(f"解析b23.tv短链失败：{short_url} -> {real_url}")
+        return "error"
+
+    logger.info(f"解析视频链接成功：{short_url} -> {bvid}")
+
+    return bvid
 
 
 @dataclass(config=dict(arbitrary_types_allowed=True))
@@ -27,7 +67,7 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "bvid": {
                     "type": "string",
-                    "description": "想要获取的哔哩哔哩视频的BVID，BVID以BV开头，是视频的唯一标识符",
+                    "description": "想要获取的哔哩哔哩视频的BVID或是b23.tv链接，例如BV1GJ411x7h7或https://b23.tv/4bdIZBf",
                 },
             },
             "required": ["bvid"],
@@ -58,9 +98,16 @@ class BilibiliTool(FunctionTool[AstrAgentContext]):
 
         bvid = kwargs.get("bvid", "").strip()
 
-        # 2. 输入格式校验
-        if not bvid or not BVID_PATTERN.match(bvid):
-            return f"参数错误：'{bvid}' 不是合法的 BVID 格式（需以 BV 开头且仅包含字母数字）。"
+        # 2. 格式校验
+        if "b23" in bvid:
+            bvid = await resolve_b23(bvid)
+        elif not BVID_PATTERN.match(bvid):
+            bvid = await resolve_b23("https://b23.tv/" + bvid)
+
+        if bvid == "error":
+            return "解析b23.tv短链失败，请检查链接是否正确"
+
+        logger.info(f"开始解析视频：{bvid}")
 
         # 3. 初始化凭证
         credential = Credential(sessdata=self.sessdata, bili_jct=self.bili_jct)

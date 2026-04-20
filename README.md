@@ -1,6 +1,8 @@
-# 🎬 BiliRead - 让 AI 理解 B 站视频
-
-> AstrBot 插件，让 AI 理解 B 站视频，并给出符合人设的自然回复
+<div align="center">
+    <img src="./logo.png">
+    <h1>BiliRead</h1>
+    <p>AstrBot 插件，让 AI 理解 B 站视频，并给出符合人设的自然回复</p>
+</div>
 
 ![BiliRead](https://github.com/SodaCodeSave/astrbot_plugin_biliread/blob/master/images/PixPin_2026-04-04_11-58-38.png)
 
